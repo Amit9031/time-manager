@@ -1,0 +1,49 @@
+---
+- name: Deploy Time Manager with Ansible
+  hosts: local
+  gather_facts: false
+  vars:
+    project_dir: "{{ lookup('env', 'PROJECT_DIR') | default('/project', true) }}"
+    image_name: timemanager:ansible
+    container_name: timemanager-ansible
+    host_port: 5051
+
+  tasks:
+    - name: Build the Docker image from the Dockerfile
+      community.docker.docker_image:
+        name: "{{ image_name }}"
+        build:
+          path: "{{ project_dir }}"
+          dockerfile: Dockerfile
+        source: build
+        force_source: true
+
+    - name: Create persistent data volume
+      community.docker.docker_volume:
+        name: timemanager_ansible_data
+
+    - name: Run the container
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        image: "{{ image_name }}"
+        state: started
+        recreate: true
+        restart_policy: unless-stopped
+        published_ports:
+          - "{{ host_port }}:5000"
+        volumes:
+          - timemanager_ansible_data:/data
+
+    - name: Wait for the app health endpoint
+      ansible.builtin.uri:
+        url: "http://host.docker.internal:{{ host_port }}/health"
+        status_code: 200
+      register: health
+      retries: 10
+      delay: 3
+      until: health.status == 200
+      ignore_errors: true
+
+    - name: Show result
+      ansible.builtin.debug:
+        msg: "Time Manager deployed by Ansible -> http://localhost:{{ host_port }}"

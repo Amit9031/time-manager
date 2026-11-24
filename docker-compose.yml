@@ -1,0 +1,13 @@
+services:
+  timemanager:
+    build: .
+    image: timemanager:latest
+    container_name: timemanager
+    ports:
+      - "5050:5000"        # 5050 on host (macOS uses 5000 for AirPlay)
+    volumes:
+      - timemanager_data:/data
+    restart: unless-stopped
+
+volumes:
+  timemanager_data:

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Time Manager</title>
+<style>
+ body{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem;background:#f6f7fb;color:#222}
+ h1{margin-bottom:.2rem} .sub{color:#666;margin-top:0}
+ form{display:flex;gap:.5rem;flex-wrap:wrap;margin:1rem 0}
+ input,select,button{padding:.55rem .7rem;border:1px solid #ccd;border-radius:8px;font-size:1rem}
+ input[name=title]{flex:1;min-width:180px} input[type=number]{width:90px}
+ button{background:#4f46e5;color:#fff;border:0;cursor:pointer} button.alt{background:#e5e7eb;color:#222}
+ button.red{background:#ef4444}
+ .card{background:#fff;border-radius:12px;padding:.8rem 1rem;margin:.5rem 0;display:flex;align-items:center;gap:.8rem;box-shadow:0 1px 3px #0001}
+ .card.done{opacity:.55} .grow{flex:1} .meta{font-size:.85rem;color:#666}
+ .time{font-variant-numeric:tabular-nums;font-weight:600;min-width:72px;text-align:right}
+ .stats{display:flex;gap:1rem;margin:1rem 0}.stat{background:#fff;padding:.7rem 1rem;border-radius:12px;flex:1;box-shadow:0 1px 3px #0001}
+ .stat b{display:block;font-size:1.4rem}
+</style></head><body>
+<h1>⏱ Time Manager</h1><p class="sub">Plan tasks, track time, finish things.</p>
+<div class="stats">
+ <div class="stat"><b id="sTotal">0m</b>Tracked</div>
+ <div class="stat"><b id="sDone">0/0</b>Done</div>
+ <div class="stat"><b id="sCat">–</b>Top category</div>
+</div>
+<form id="f">
+ <input name="title" placeholder="New task…" required>
+ <select name="category"><option>Study</option><option>Work</option><option>Project</option><option>Personal</option><option>General</option></select>
+ <input name="est_minutes" type="number" min="1" value="25" title="Estimated minutes">
+ <button>Add</button>
+</form>
+<div id="list"></div>
+<script>
+const fmt=s=>{const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;
+ return (h?h+':':'')+String(m).padStart(h?2:1,'0')+':'+String(x).padStart(2,'0')};
+let tasks=[];
+async function api(url,method='POST',body){const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});return r.json()}
+async function load(){tasks=await api('/api/tasks','GET');render();summary()}
+async function summary(){const s=await api('/api/summary','GET');
+ sTotal.textContent=Math.round(s.total_seconds/60)+'m';sDone.textContent=s.done+'/'+s.tasks;
+ const top=Object.entries(s.by_category).sort((a,b)=>b[1]-a[1])[0];sCat.textContent=top?top[0]:'–'}
+function render(){list.innerHTML='';tasks.forEach(t=>{
+ const d=document.createElement('div');d.className='card'+(t.done?' done':'');
+ d.innerHTML=`<div class="grow"><div>${t.done?'✅ ':''}${t.title.replace(/</g,'&lt;')}</div>
+  <div class="meta">${t.category} · est ${t.est_minutes}m</div></div>
+  <div class="time" data-id="${t.id}">${fmt(t.total_seconds)}</div>`;
+ if(!t.done){
+  const b=document.createElement('button');b.textContent=t.running?'Pause':'Start';if(t.running)b.className='alt';
+  b.onclick=async()=>{await api(`/api/tasks/${t.id}/${t.running?'stop':'start'}`);load()};d.append(b);
+  const k=document.createElement('button');k.textContent='Done';k.className='alt';
+  k.onclick=async()=>{await api(`/api/tasks/${t.id}/done`);load()};d.append(k)}
+ const x=document.createElement('button');x.textContent='✕';x.className='red';
+ x.onclick=async()=>{await api(`/api/tasks/${t.id}`,'DELETE');load()};d.append(x);
+ list.append(d)})}
+f.onsubmit=async e=>{e.preventDefault();const o=Object.fromEntries(new FormData(f));
+ await api('/api/tasks','POST',o);f.title.value='';load()};
+setInterval(()=>{tasks.forEach(t=>{if(t.running){t.total_seconds++;
+ const el=document.querySelector(`.time[data-id="${t.id}"]`);if(el)el.textContent=fmt(t.total_seconds)}})},1000);
+load();
+</script></body></html>
